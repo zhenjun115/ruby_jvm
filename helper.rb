@@ -1,4 +1,5 @@
 require 'json'
+require 'pp'
 
 $CLASS_FILE = {
 	"magic" => nil,
@@ -6,7 +7,7 @@ $CLASS_FILE = {
 	"major_version" => nil,
 	"constant_pool_count" => nil,
 	"constant_pool" => [],
-	"access_flags" => nil,
+	"access_flags" => { "val" => nil, "means" => [] },
 	"this_class" => nil,
 	"super_class" => nil
 }
@@ -198,10 +199,132 @@ def read_constant_pool( file )
 end
 
 def read_access_flags( file )
-	result = readU2( file ).map { |item| item.to_s(16) }
-	$CLASS_FILE['minor_version'] = result.join().to_i( 16 )
+	result = readU2( file )
+	$CLASS_FILE[ 'access_flags' ][ 'val' ] = result.map { |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_PUBLIC" ) if result[ 1 ] & 0x0f == 1
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_FINAL" ) if result[ 1 ] >> 4 == 1
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_SUPER" ) if result[ 1 ] >> 4 == 2
+
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_INTERFACE" ) if result[ 0 ] & 0x0f == 2
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_ABSTRACT" ) if result[ 0 ] & 0x0f == 4
+
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_SYNTHETIC" ) if result[ 0 ] >> 4 == 1
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_ANNOTATION" ) if result[ 0 ] >> 4 == 2
+	$CLASS_FILE[ 'access_flags' ]['means'].push( "ACC_ENUM" ) if result[ 0 ] >> 4 == 4
+end
+
+def read_this_class( file )
+	this_class = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 ) 
+	$CLASS_FILE[ 'this_class' ] = this_class
+end
+
+def read_super_class( file )
+	super_class = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'super_class' ] = super_class
+end
+
+def read_interfaces_count( file )
+	interfaces_count = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'interfaces_count' ] = interfaces_count
+end
+
+def read_interfaces( file )
+	interfaces = []
+	1.upto( $CLASS_FILE[ 'interfaces_count' ] ) { |i|
+		interfaces.push( readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 ) )
+	}
+
+	$CLASS_FILE[ 'interfaces' ] = interfaces
+end
+
+def read_fields_count( file )
+	fields_count = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'fields_count' ] = fields_count
+end
+
+def read_fields( file )
+	fields = []
+	1.upto( $CLASS_FILE[ 'fields_count' ] ) { |item|
+		#fields.push( readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 ) )
+		#Todo, fields 信息读取
+	}
+
+	$CLASS_FILE[ 'fields' ] = fields
+end
+
+def read_methods_count( file )
+	methods_count = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'methods_count' ] = methods_count
+end
+
+def read_methods( file )
+	methods = []
+	1.upto( $CLASS_FILE[ 'methods_count' ] ) { |item|
+		# methods.push( readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 ) )
+		# method info
+		method_info = {
+			"access_flags" => nil,
+			"name_index" => nil,
+			"descriptor_index" => nil,
+			"attributes_count" => nil,
+			"attribute_info" => [] 
+		}
+
+		method_info[ 'access_flags' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+		method_info[ 'name_index' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+		method_info[ 'descriptor_index' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+		method_info[ 'attributes_count' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+
+		1.upto( method_info[ 'attributes_count' ] ) { |item|
+			attribute_info = {
+				"attribute_name_index" => nil,
+				"attribute_length" => nil,
+				"info" => []
+			}
+
+			attribute_info[ 'attribute_name_index' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+			attribute_info[ 'attribute_length' ] = readU4( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+
+			1.upto( attribute_info[ 'attribute_length' ] ) {
+				attribute_info[ 'info' ].push( readU1( file ) )
+			}
+
+			method_info[ 'attribute_info' ].push( attribute_info )
+		}
+
+		methods.push( method_info )
+	}
+
+	$CLASS_FILE[ 'methods' ] = methods
+end
+
+def read_attributes_count( file )
+	attributes_count = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+	$CLASS_FILE[ 'attributes_count' ] = attributes_count
+end
+
+def read_attributes( file )
+	attributes = []
+	1.upto( $CLASS_FILE[ 'attributes_count' ] ) { |item|
+		attribute_info = {
+			"attribute_name_index" => nil,
+			"attribute_length" => nil,
+			"info" => []
+		}
+
+		attribute_info[ 'attribute_name_index' ] = readU2( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+		attribute_info[ 'attribute_length' ] = readU4( file ).map{ |item| item.to_s( 16 ) }.join().to_i( 16 )
+
+		1.upto( attribute_info[ 'attribute_length' ] ) {
+			attribute_info[ 'info' ].push( readU1( file ) )
+		}
+
+		attributes.push( attribute_info )
+	}
+
+	$CLASS_FILE[ 'attributes' ] = attributes
 end
 
 def result()
-	puts $CLASS_FILE
+	pp $CLASS_FILE
 end
